@@ -1,12 +1,11 @@
 package controllers;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-
-import javax.persistence.PersistenceException;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.servlet.ModelAndView;
 
 import dao.BootPrepDAO;
 import entities.Resource;
-import entities.ResourceTag;
 import entities.User;
 import entities.UserData;
 import entities.UserDataKey;
@@ -44,7 +42,8 @@ public class ResourceController {
 	
 	@RequestMapping(path="resourcelist.do")
 	public ModelAndView listAllResources(@ModelAttribute("userId") int userId,
-										 String view) {
+					 String view,
+					 @RequestParam(value="tagFilter", required=false) String tagFilter) {
 		List<Resource> resources = new ArrayList<>();
 		ModelAndView mv = new ModelAndView("resourcelist.jsp");
 		if (view == null) view = "";
@@ -60,8 +59,25 @@ public class ResourceController {
 			resources = dao.getAllResources();
 			break;
 		}
+		resources = filter(tagFilter, resources);
 		mv.addObject("resources", resources); 
 		return mv;
+	}
+	
+	private List<Resource> filter(String tagFilter, List<Resource> resources) {
+		if (tagFilter != null && !tagFilter.trim().equals("")) {
+			List<Resource> filtered = new ArrayList<>();
+			for (Resource resource : resources) {
+				for (String tag : resource.getTagNames()) {
+					if (tag.matches("(?i)\\b"+tagFilter+"\\b")) {
+						filtered.add(resource);
+						break;
+					}
+				}
+			}
+			return filtered;
+		}
+		return resources;
 	}
 	
 	@RequestMapping(path="resourceadd.do")
@@ -69,7 +85,7 @@ public class ResourceController {
 										  @ModelAttribute("auth") String auth,
 										  Integer resourceId) {
 		dao.addResourceToUser(userId, resourceId);
-		return listAllResources(userId, "my");
+		return listAllResources(userId, "my", null);
 	}
 	
 	@RequestMapping(path="resource.do")
@@ -89,7 +105,7 @@ public class ResourceController {
 		ModelAndView mv = new ModelAndView();
 		User u = dao.removeResourceFromUser(userId, resourceId);
 		if (view.equals("list")) {
-			return listAllResources(userId, "my");
+			return listAllResources(userId, "my", null);
 		} else if (view.equals("resource")) {
 			mv.setViewName("resource.jsp");
 			viewLoader(mv, userId, resourceId);
@@ -113,7 +129,7 @@ public class ResourceController {
 			return mv;
 		}
 		Resource r = dao.createResource(input);
-		return listAllResources(userId, "add");
+		return listAllResources(userId, "add", null);
 	}
 	
 	private Resource validResource(String url, String name, String description, String video, String photo) {
@@ -175,7 +191,7 @@ public class ResourceController {
 		Resource r = null;
 		try { // exception thrown if resource already has the tag
 			r = dao.addTagToResource(tagName, userId, resourceId);
-		} catch (PersistenceException pe) {
+		} catch (Exception e) {
 			r = dao.getResourceById(resourceId);
 			mv.addObject("error", "Resource already has this tag.");
 		}
